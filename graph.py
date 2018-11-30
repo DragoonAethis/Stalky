@@ -1,34 +1,19 @@
-
-import datetime
-import os
-
-import history
-import fbapi
-import status
-
-
-LOG_DATA_DIR = "log"
-CSV_OUTPUT_DIR = "generated_graphs/csv"
+import os, datetime
+import fetcher, status
 
 # LOL TIMEZONES TOO HARD
 UTC_OFFSET = 11
-
 ONE_DAY_SECONDS = 60 * 60 * 24
+CSV_OUTPUT_DIR = "generated_graphs/csv"
+
 
 class Grapher():
-
     def __init__(self):
         if not os.path.exists(CSV_OUTPUT_DIR):
             os.makedirs(CSV_OUTPUT_DIR)
 
     def to_csv(self, uid, start_time, end_time):
-
-        # The user's history.
-        status_history = history.StatusHistory(uid)
-
-        # Their Facebook username.
-        #uname = fbapi.get_user_name(uid)
-
+        status_history = status.StatusHistory(uid)  # The user's history.
 
         # Generate a CSV from the multiple linear timeseries
         with open("generated_graphs/csv/{uid}.csv".format(uid=uid), "w") as f:
@@ -50,7 +35,7 @@ class Grapher():
 
 
     def generate_all_csvs(self, start_time, end_time):
-        for filename in os.listdir(LOG_DATA_DIR):
+        for filename in os.listdir("log"):
             print(filename)
             uid = filename.split(".")[0]
             self.to_csv(uid, start_time, end_time)
@@ -59,6 +44,6 @@ class Grapher():
 if __name__ == "__main__":
     g = Grapher()
 
-    now = history.StatusHistory.START_TIME
+    now = status.StatusHistory.START_TIME
     # Graph the last three days by default, but you can do ~whatever you believe you cannnnn~
     g.generate_all_csvs(start_time=now - 3 * ONE_DAY_SECONDS, end_time=now)

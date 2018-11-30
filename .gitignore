@@ -1,5 +1,5 @@
 *~
-SECRETS.txt
+config.py
 .*.swp
 *.pyc
 generated_graphs/

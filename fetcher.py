@@ -1,58 +1,53 @@
-import argparse as ap
-import json
-import os
-import time
+#!/usr/bin/python3
+import sys, os, json, time, urllib.parse, urllib.request
+# import requests  # We urllib now, fam
 
-import requests
+try:
+    import config  # Place your config stuffs in config.py pls.
+except ModuleNotFoundError:
+    print("Before running this, try creating a config file with your credentials.")
+    exit()
 
-import graph
-
-
-secrets = ap.Namespace()
-
-# Load the secrets from file so some scrublord like me doesn't accidentally commit them to git.
-with open("SECRETS.txt") as f:
-    for line in f:
-        vals = line.strip().split('=', 1)
-        setattr(secrets, vals[0].lower(), vals[1])
-
+if sys.version_info < (3, 6):
+    print("You need at least Python 3.6 for this to work.")
+    exit()
 
 SLEEP_TIME = 1
-
 OFFLINE_STATUS_JSON = """{"lat": "offline", "webStatus": "invisible", "fbAppStatus": "invisible", "otherStatus": "invisible", "status": "invisible", "messengerStatus": "invisible"}"""
 ACTIVE_STATUS_JSON = """{ "lat": "online", "webStatus": "invisible", "fbAppStatus": "invisible", "otherStatus": "invisible", "status": "active", "messengerStatus": "invisible"}"""
+
 
 class Fetcher():
     # Headers to send with every request.
     REQUEST_HEADERS = {
         'accept': '*/*',
-        'accept-encoding': 'gzip, deflate, sdch',
+        # If you leave gzip etc enabled here, urllib will break on decoding :<
         'accept-language': 'en-US,en;q=0.8,en-AU;q=0.6',
-        'cookie': secrets.cookie,
+        'cookie': config.STALKER_COOKIE,
         'dnt': '1',
         'origin': 'https://www.facebook.com',
         'referer': 'https://www.facebook.com/',
-        'user-agent': 'Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/46.0.2490.80 Safari/537.36'
+        'user-agent': 'Mozilla/5.0 (X11; Linux x86_64; rv:63.0) Gecko/20100101 Firefox/63.0'
     }
 
     # Hey hey, Facebook puts this in front of all their JSON to prevent hijacking. But don't worry, we're ~verified secure~.
     JSON_PAYLOAD_PREFIX = "for (;;); "
 
     def __init__(self):
-        if not os.path.exists(graph.LOG_DATA_DIR):
-            os.makedirs(graph.LOG_DATA_DIR)
+        if not os.path.exists("log"):
+            os.makedirs("log")
         self.reset_params()
-        self.excludes = []
-        if hasattr(secrets, 'excludes'):
-            self.excludes = secrets.excludes.split(',',1)
 
     def make_request(self):
         # Load balancing is for chumps. Facebook can take it.
-        url = "https://5-edge-chat.facebook.com/pull"
-        response_obj = requests.get(url, params=self.params, headers=self.REQUEST_HEADERS)
+        parsed_args = urllib.parse.urlencode(self.params)
+        full_url = "https://6-edge-chat.facebook.com/pull?{}".format(parsed_args)
+        request = urllib.request.Request(full_url, headers=self.REQUEST_HEADERS)
+        with urllib.request.urlopen(request) as f:
+            response_obj = f.read()
 
         try:
-            raw_response = response_obj.text
+            raw_response = response_obj.decode('utf-8')
             if not raw_response:
                 return None
             if raw_response.startswith(self.JSON_PAYLOAD_PREFIX):
@@ -65,14 +60,14 @@ class Fetcher():
         except ValueError as e:
             print(str(e))
             return None
-
-        print("Response:" + str(data))
+        except UnicodeDecodeError as e:
+            print(str(e))
+            return None
 
         return data
 
-
     def _log_lat(self, uid, lat_time):
-        if not uid in self.excludes:
+        if uid in config.STALKED_LIST:
             with open("log/{uid}.txt".format(uid=uid), "a") as f:
                 # Now add an online status at the user's LAT.
                 user_data = []
@@ -88,10 +83,7 @@ class Fetcher():
                 f.write("|".join(user_data))
                 f.write("\n")
 
-
-
     def start_request(self):
-        print(">")
         resp = self.make_request()
         if resp is None:
             print("Got error from request, restarting...")
@@ -107,21 +99,15 @@ class Fetcher():
             self.params["seq"] = resp["seq"]
 
         if "ms" in resp:
-            for item in resp["ms"]:
-                # The online/offline info we're looking for.
-
-                if item["type"] == "buddylist_overlay":
-
-                    # Find the key with all the message details, that one is the UID.
+            for item in resp["ms"]: # The online/offline info we're looking for.
+                if item["type"] == "buddylist_overlay": # Find the key with all the message details, that one is the UID.
                     for key in item["overlay"]:
                         if type(item["overlay"][key]) == dict:
                             uid = key
 
                             # Log the LAT in this message.
                             self._log_lat(uid, str(item["overlay"][uid]["la"]))
-
-                            # Now log their current status.
-                            if "p" in item["overlay"][uid]:
+                            if "p" in item["overlay"][uid]: # Now log their current status.
                                 with open("log/{uid}.txt".format(uid=uid), "a") as f:
                                     user_data = []
                                     user_data.append(str(time.time()))
@@ -135,40 +121,27 @@ class Fetcher():
                         if "lat" in item["buddyList"][uid]:
                             self._log_lat(uid, str(item["buddyList"][uid]["lat"]))
 
-
-
     def reset_params(self):
         self.params = {
-            # No idea what this is.
-            'cap': '8',
-            # No idea what this is.
-            'cb': '2qfi',
-            # No idea what this is.
-            'channel': 'p_' + secrets.uid,
-            'clientid': secrets.client_id,
+            'cap': '8', # No idea?
+            'cb': '2qfi', # No idea? (j6wr for me)
+            'channel': 'p_' + config.STALKER_UID, # Internal push notification channel?
+            'clientid': config.STALKER_CLIENTID,
             'format': 'json',
-            # Is this my online status?
-            'idle': '0',
-            # No idea what this is.
-            'isq': '173180',
-            # Whether to stream the HTTP GET request. We don't want to!
-            # 'mode': 'stream',
-            # Is this how many messages we have got from Facebook in this session so far?
-            # Previous value: 26
-            'msgs_recv': '0',
-            # No idea what this is.
-            'partition': '-2',
-            # No idea what this is.
-            'qp': 'y',
-            # Set starting sequence number to 0.
-            # This number doesn't seem to be necessary for getting the /pull content, since setting it to 0 every time still gets everything as far as I can tell. Maybe it's used for #webscale reasons.
-            'seq': '0',
+            'idle': '0', # Is this my online status? (2 for me)
+            'isq': '173180', # No idea? (168989 for me)
+            # 'mode': 'stream', # Whether to stream the HTTP GET request. We don't want to!
+            'msgs_recv': '0', # How many messages we've got from Facebook in this session so far?
+            'partition': '-2', # No idea?
+            'qp': 'y', # No idea?
+            'seq': '0', # Set starting sequence number to 0. (Not required for /pull, setting to 0 gets everything.)
             'state': 'active',
-            'sticky_pool': 'atn2c06_chat-proxy',
+            'sticky_pool': 'rash0c01_chatproxy-regional',
             'sticky_token': '0',
-            'uid': secrets.uid,
-            'viewer_uid': secrets.uid,
-            'wtc': '171%2C170%2C0.000%2C171%2C171'
+            'uid': config.STALKER_UID,
+            'viewer_uid': config.STALKER_UID,
+            'wtc': '171%2C170%2C0.000%2C171%2C171',
+            'iris_enabled': 'false'
         }
 
 
