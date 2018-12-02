@@ -12,9 +12,7 @@ if sys.version_info < (3, 6):
     print("You need at least Python 3.6 for this to work.")
     exit()
 
-SLEEP_TIME = 1
-OFFLINE_STATUS_JSON = """{"lat": "offline", "webStatus": "invisible", "fbAppStatus": "invisible", "otherStatus": "invisible", "status": "invisible", "messengerStatus": "invisible"}"""
-ACTIVE_STATUS_JSON = """{ "lat": "online", "webStatus": "invisible", "fbAppStatus": "invisible", "otherStatus": "invisible", "status": "active", "messengerStatus": "invisible"}"""
+DEBUG_MODE = False
 
 
 class Fetcher():
@@ -64,24 +62,16 @@ class Fetcher():
             print(str(e))
             return None
 
+        if DEBUG_MODE:
+            print("> " + raw_response)
         return data
 
-    def _log_lat(self, uid, lat_time):
+    def log_last_active_time(self, uid, lat_time):
         if uid in config.STALKED_LIST:
+            if DEBUG_MODE:
+                print("Logging {} for uid {}".format(lat_time, uid))
             with open("log/{uid}.txt".format(uid=uid), "a") as f:
-                # Now add an online status at the user's LAT.
-                user_data = []
-                user_data.append(lat_time)
-                user_data.append(ACTIVE_STATUS_JSON)
-                f.write("|".join(user_data))
-                f.write("\n")
-
-                # Assume the user is currently offline, since we got a lat for them. (This is guaranteed I think.)
-                user_data = []
-                user_data.append(str(time.time()))
-                user_data.append(OFFLINE_STATUS_JSON)
-                f.write("|".join(user_data))
-                f.write("\n")
+                f.write(str(lat_time) + "\n")
 
     def start_request(self):
         resp = self.make_request()
@@ -101,25 +91,16 @@ class Fetcher():
         if "ms" in resp:
             for item in resp["ms"]: # The online/offline info we're looking for.
                 if item["type"] == "buddylist_overlay": # Find the key with all the message details, that one is the UID.
-                    for key in item["overlay"]:
-                        if type(item["overlay"][key]) == dict:
-                            uid = key
-
-                            # Log the LAT in this message.
-                            self._log_lat(uid, str(item["overlay"][uid]["la"]))
-                            if "p" in item["overlay"][uid]: # Now log their current status.
-                                with open("log/{uid}.txt".format(uid=uid), "a") as f:
-                                    user_data = []
-                                    user_data.append(str(time.time()))
-                                    user_data.append(json.dumps(item["overlay"][uid]["p"]))
-                                    f.write("|".join(user_data))
-                                    f.write("\n")
+                    for uid in item["overlay"]:
+                        if type(item["overlay"][uid]) == dict:
+                            if "la" in item["overlay"][uid]:
+                                self.log_last_active_time(uid, str(item["overlay"][uid]["la"]))
 
                 # This list contains the last active times (lats) of users.
                 if "buddyList" in item:
                     for uid in item["buddyList"]:
                         if "lat" in item["buddyList"][uid]:
-                            self._log_lat(uid, str(item["buddyList"][uid]["lat"]))
+                            self.log_last_active_time(uid, str(item["buddyList"][uid]["lat"]))
 
     def reset_params(self):
         self.params = {
@@ -150,7 +131,7 @@ if __name__ == "__main__":
     while True:
         try:
             f.start_request()
-            time.sleep(SLEEP_TIME)
+            time.sleep(1)
         except UnicodeDecodeError:
             f.reset_params()
             print("UnicodeDecodeError!")
