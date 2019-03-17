@@ -31,7 +31,7 @@ collecting data, used `merge.sh` to glue together all the logs and leave only un
 Then, I've renamed the resultant merged logs into FirstLastName.log, moved them next to `generator.py` and ran that to
 get `generated.html` which contains a heatmap, like this one:
 
-[[heatmap.png]]
+![Heatmap example](heatmap.png)
 
 Blue row background marks weekends. The count in each square is the amount of timestamps collected for that hour - in
 theory, the larger the timestamp count, the more active a given user was that hour on Facebook or related services.
