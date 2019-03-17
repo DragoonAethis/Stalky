@@ -21,3 +21,17 @@ STALKED_LIST = [
     '100000000000003'  # til 3am and attempts (poorly) to deny the fact.
 ]
 ```
+
+## Drawing Heatmaps
+
+After running the fetcher for a while, you'll end up with files containing hundreds of timestamps. I ran the fetcher on
+a remote machine running 24/7 and periodically ran `pull.sh` to grab the logs to my local machine, then after I was done
+collecting data, used `merge.sh` to glue together all the logs and leave only unique timestamps in the log files.
+
+Then, I've renamed the resultant merged logs into FirstLastName.log, moved them next to `generator.py` and ran that to
+get `generated.html` which contains a heatmap, like this one:
+
+[[heatmap.png]]
+
+Blue row background marks weekends. The count in each square is the amount of timestamps collected for that hour - in
+theory, the larger the timestamp count, the more active a given user was that hour on Facebook or related services.
